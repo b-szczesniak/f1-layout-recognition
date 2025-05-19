@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import os
 import csv
@@ -13,7 +14,7 @@ from torchvision import transforms, models
 PAGE_TITLE = "Rozpoznawanie toru po rysunku!!1!🔥🔥"
 CANVAS_SIZE = 224
 FEEDBACK_CSV = os.path.join("feedback", "feedback.csv")
-MODEL_PATH = "f1_track_layout_resnet18_v1_unfiltered_best.pth"
+MODEL_PATH = "f1_track_layout_resnet18_v1.pth"
 CLASS_NAMES = [
     'Albert Park Circuit', 'Autódromo Hermanos Rodríguez', 'Bahrain International Circuit',
     'Baku City Circuit', 'Circuit Gilles Villeneuve', 'Circuit Zandvoort',
@@ -26,22 +27,30 @@ CLASS_NAMES = [
     'Suzuka International Racing Course', 'Yas Marina Circuit'
 ]
 
+class EfficientNetModel(nn.Module):
+    def __init__(self, num_classes: int):
+        super(EfficientNetModel, self).__init__()
+        self.model = models.efficientnet_b0(pretrained=True)
+        for param in self.model.parameters():
+            param.requires_grad = False
+        for param in self.model.classifier.parameters():
+            param.requires_grad = True
+        self.model.classifier = nn.Sequential(
+            nn.Linear(self.model.classifier[1].in_features, 512),
+            nn.ReLU(),
+            nn.Linear(512, num_classes)
+        )
+    def forward(self, x):
+        return self.model(x)
+
 @st.cache_resource
-def load_model(path: str) -> torch.nn.Module:
-    """Ładuje wytrenowany model ResNet18."""
-    base = models.resnet18(weights=None)
-    in_features = base.fc.in_features
-    base.fc = torch.nn.Sequential(
-        torch.nn.Linear(in_features, 256),
-        torch.nn.ReLU(),
-        torch.nn.Dropout(p=0.4),
-        torch.nn.Linear(256, len(CLASS_NAMES))
-    )
+def load_model(path: str) -> nn.Module:
+    """Ładuje wytrenowany model EfficientNet."""
+    model = EfficientNetModel(num_classes=len(CLASS_NAMES))
     state = torch.load(path, map_location='cpu')
-    weights = state.get('model_state_dict', state) if isinstance(state, dict) else state
-    base.load_state_dict(weights)
-    base.eval()
-    return base
+    model.load_state_dict(state)
+    model.eval()
+    return model
 
 @st.cache_resource
 def get_preprocessor(size: int) -> transforms.Compose:
@@ -51,7 +60,6 @@ def get_preprocessor(size: int) -> transforms.Compose:
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-
 
 def predict(image: Image.Image, model: torch.nn.Module, preprocessor: transforms.Compose) -> dict:
     """Generuje predykcje klas i prawdopodobieństwa."""
