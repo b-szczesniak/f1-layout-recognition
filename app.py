@@ -10,7 +10,7 @@ from datetime import datetime
 from torchvision import transforms, models
 
 # --- Konfiguracja aplikacji ---
-PAGE_TITLE = "🎨 Rysowanie i Rozpoznawanie AI"
+PAGE_TITLE = "Rozpoznawanie toru po rysunku!!1!🔥🔥"
 CANVAS_SIZE = 224
 FEEDBACK_CSV = os.path.join("feedback", "feedback.csv")
 MODEL_PATH = "f1_track_layout_resnet18_v1_unfiltered_best.pth"
@@ -85,6 +85,18 @@ def main():
 
     init_feedback_storage()
 
+    # Initialize session state variables if they don't exist
+    if 'prediction_made' not in st.session_state:
+        st.session_state.prediction_made = False
+    if 'probabilities' not in st.session_state:
+        st.session_state.probabilities = None
+    if 'canvas_key' not in st.session_state:
+        st.session_state.canvas_key = 0
+    if 'img' not in st.session_state:
+        st.session_state.img = None
+    if 'best_class' not in st.session_state:
+        st.session_state.best_class = None
+
     # Wczytanie zasobów
     model = load_model(MODEL_PATH)
     preprocessor = get_preprocessor(CANVAS_SIZE)
@@ -96,7 +108,7 @@ def main():
         st.subheader("✍️ Narysuj tutaj")
         canvas_result = st_canvas(
             fill_color="rgba(255, 255, 255, 0)",
-            stroke_width=4,
+            stroke_width=6,
             stroke_color="#000000",
             background_color="#FFFFFF",
             drawing_mode="freedraw",
@@ -104,50 +116,77 @@ def main():
             display_toolbar=False,
             height=600,
             width=600,
-            key="canvas"
+            key=f"canvas_{st.session_state.canvas_key}",
         )
-        # Przycisk do uruchomienia predykcji
-        run_predict = st.button("🚀 Rozpoznaj rysunek")
+        
+        # Function to handle prediction
+        def make_prediction():
+            if canvas_result.image_data is not None:
+                # Przygotowanie obrazu
+                img_array = canvas_result.image_data[:, :, :3].astype('uint8')
+                img = Image.fromarray(img_array)
+                
+                # Predykcja
+                with st.spinner("Analiza obrazu..."):
+                    probabilities = predict(img, model, preprocessor)
+                
+                # Save results to session state
+                st.session_state.prediction_made = True
+                st.session_state.probabilities = probabilities
+                st.session_state.img = img
+                st.session_state.best_class = max(probabilities, key=probabilities.get)
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🚀 Rozpoznaj rysunek"):
+                make_prediction()
+        with col2:
+            if st.button("🧹 Wyczyść płótno"):
+                st.session_state.canvas_key += 1
+                st.session_state.prediction_made = False
+                st.rerun()
 
     with col_results:
-        if run_predict and canvas_result.image_data is not None:
-            # Przygotowanie obrazu
-            img_array = canvas_result.image_data[:, :, :3].astype('uint8')
-            img = Image.fromarray(img_array)
-
-            # Predykcja
-            with st.spinner("Analiza obrazu..."):
-                probabilities = predict(img, model, preprocessor)
-
+        if st.session_state.prediction_made:
+            probabilities = st.session_state.probabilities
+            img = st.session_state.img
+            best_class = st.session_state.best_class
+            
             top5 = dict(sorted(probabilities.items(), key=lambda x: x[1], reverse=True)[:5])
-
-            # Najlepsza klasa
-            best_class = max(probabilities, key=probabilities.get)
-
+            
             # Wyniki
             st.subheader("🤖 Wynik rozpoznawania")
             st.write(f"**Klasa:** {best_class}")
-
+            
             st.subheader("✅ Czy model się nie myli?")
-            correct = st.radio("Model poprawnie rozpoznał tor?", options=[True, False], index=0)
+            # Use a key for the radio button to avoid interference with other widgets
+            correct = st.radio(
+                "Model poprawnie rozpoznał tor?", 
+                options=[True, False], 
+                index=0,
+                key="correct_radio"
+            )
+            
             user_label = best_class
             if not correct:
-                user_label = st.selectbox("Wybierz poprawny tor:", options=CLASS_NAMES)
+                user_label = st.selectbox("Wybierz poprawny tor:", options=CLASS_NAMES, key="label_select")
 
-            if st.button("💾 Zapisz feedback"):
+            
+            if st.button("💾 Zapisz feedback", key="save_feedback_btn"):
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 append_feedback(timestamp, img, best_class, correct, user_label)
                 st.success("Dzięki za feedback!🔥")
+                st.session_state.prediction_made = False
 
             # Tabela z 5 najlepszymi
             st.subheader("🏆 Top 5 wyników")
             st.table(top5)
-
+            
             # Wykres słupkowy ze wszystkimi klasami
             st.subheader("📊 Pełna rozkład prawdopodobieństwa")
             st.bar_chart(probabilities)
         else:
             st.info("Narysuj coś i kliknij 'Rozpoznaj rysunek'.")
+
 
 if __name__ == '__main__':
     main()
