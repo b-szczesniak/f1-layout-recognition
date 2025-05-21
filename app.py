@@ -1,5 +1,4 @@
 import streamlit as st
-import numpy as np
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import torch
@@ -10,7 +9,6 @@ import csv
 from datetime import datetime
 from torchvision import transforms, models
 
-# --- Konfiguracja aplikacji ---
 PAGE_TITLE = "Rozpoznawanie toru po rysunku!!1!🔥🔥"
 CANVAS_SIZE = 224
 FEEDBACK_CSV = os.path.join("feedback", "feedback.csv")
@@ -77,23 +75,19 @@ def init_feedback_storage():
             writer.writerow(['timestamp', 'image_path', 'model_pred', 'user_correct', 'user_label'])
 
 def append_feedback(timestamp: str, img: Image.Image, model_pred: str, correct: bool, user_label: str):
-    # Save image
     track_name = model_pred if correct else user_label
     img_path = os.path.join("data", "filtered_images", track_name, f"{timestamp}.png")
     img.save(img_path)
-    # Append CSV
     with open(FEEDBACK_CSV, 'a', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([timestamp, img_path, model_pred, correct, user_label])
 
 def main():
-    # Ustawienia strony
     st.set_page_config(page_title=PAGE_TITLE, layout="wide")
     st.title(PAGE_TITLE)
 
     init_feedback_storage()
 
-    # Initialize session state variables if they don't exist
     if 'prediction_made' not in st.session_state:
         st.session_state.prediction_made = False
     if 'probabilities' not in st.session_state:
@@ -105,11 +99,9 @@ def main():
     if 'best_class' not in st.session_state:
         st.session_state.best_class = None
 
-    # Wczytanie zasobów
     model = load_model(MODEL_PATH)
     preprocessor = get_preprocessor(CANVAS_SIZE)
 
-    # Układ: dwie kolumny (płótno | wyniki)
     col_canvas, col_results = st.columns([1, 1])
 
     with col_canvas:
@@ -127,10 +119,8 @@ def main():
             key=f"canvas_{st.session_state.canvas_key}",
         )
         
-        # Function to handle prediction
         def make_prediction():
             if canvas_result.image_data is not None:
-                # Przygotowanie obrazu
                 img_array = canvas_result.image_data[:, :, :3].astype('uint8')
                 img = Image.fromarray(img_array)
                 
@@ -138,7 +128,6 @@ def main():
                 with st.spinner("Analiza obrazu..."):
                     probabilities = predict(img, model, preprocessor)
                 
-                # Save results to session state
                 st.session_state.prediction_made = True
                 st.session_state.probabilities = probabilities
                 st.session_state.img = img
@@ -161,18 +150,17 @@ def main():
             
             top5 = dict(sorted(probabilities.items(), key=lambda x: x[1], reverse=True)[:5])
             
-            # Wyniki
             st.subheader("🤖 Wynik rozpoznawania")
             st.write(f"**Klasa:** {best_class}")
             
             st.subheader("✅ Czy model się nie myli?")
-            # Use a key for the radio button to avoid interference with other widgets
             correct = st.radio(
                 "Model poprawnie rozpoznał tor?", 
-                options=[True, False], 
+                options=["Tak", "Nie"], 
                 index=0,
                 key="correct_radio"
             )
+            correct = (correct == "Tak")
             
             user_label = best_class
             if not correct:
@@ -185,11 +173,9 @@ def main():
                 st.success("Dzięki za feedback!🔥")
                 st.session_state.prediction_made = False
 
-            # Tabela z 5 najlepszymi
             st.subheader("🏆 Top 5 wyników")
             st.table(top5)
             
-            # Wykres słupkowy ze wszystkimi klasami
             st.subheader("📊 Pełna rozkład prawdopodobieństwa")
             st.bar_chart(probabilities)
         else:
