@@ -1,6 +1,8 @@
 ## F1 track layout recognition app 🏎️
 A small side-project for GHOST Science Club
 
+### This branch is specifecly created for streamlit app, it does not contain the feedback loop
+
 ##### How to run this app localy
 1. Install requirments
 2. You need to run every notebook in correct order

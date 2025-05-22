@@ -124,7 +124,6 @@ def main():
                 img_array = canvas_result.image_data[:, :, :3].astype('uint8')
                 img = Image.fromarray(img_array)
                 
-                # Predykcja
                 with st.spinner("Analiza obrazu..."):
                     probabilities = predict(img, model, preprocessor)
                 
@@ -152,26 +151,6 @@ def main():
             
             st.subheader("🤖 Wynik rozpoznawania")
             st.write(f"**Klasa:** {best_class}")
-            
-            st.subheader("✅ Czy model się nie myli?")
-            correct = st.radio(
-                "Model poprawnie rozpoznał tor?", 
-                options=["Tak", "Nie"], 
-                index=0,
-                key="correct_radio"
-            )
-            correct = (correct == "Tak")
-            
-            user_label = best_class
-            if not correct:
-                user_label = st.selectbox("Wybierz poprawny tor:", options=CLASS_NAMES, key="label_select")
-
-            
-            if st.button("💾 Zapisz feedback", key="save_feedback_btn"):
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                append_feedback(timestamp, img, best_class, correct, user_label)
-                st.success("Dzięki za feedback!🔥")
-                st.session_state.prediction_made = False
 
             st.subheader("🏆 Top 5 wyników")
             st.table(top5)
